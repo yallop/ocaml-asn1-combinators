@@ -177,8 +177,11 @@ struct
   let to_writer (unused, cs) =
     let size = Cstruct.len cs in
     let write off buf =
-      Cstruct.set_uint8 buf off unused;
-      Cstruct.blit cs 0 buf (off + 1) size in
+      .< begin
+          Cstruct.set_uint8 .~buf .~off unused ;
+          Cstruct.blit cs 0 .~buf (.~off + 1) size
+         end >.
+    in
     Writer.immediate (size + 1) write
 
 

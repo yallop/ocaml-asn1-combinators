@@ -129,4 +129,3 @@ val decode_exn  : 'a codec -> Cstruct.t -> 'a * Cstruct.t
 val decode      : 'a codec -> Cstruct.t -> ('a * Cstruct.t) option
 
 val random : 'a t -> 'a
-

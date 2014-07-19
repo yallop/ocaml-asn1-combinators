@@ -37,7 +37,9 @@ let encode (Codec (_, enc)) a =
   Writer.to_cstruct (enc a)
 
 let encode_into (Codec (_, enc)) a =
-  Writer.to_writer (enc a)
+  (* jdy: TODO *)
+  let i, fn = Writer.to_writer (enc a) in
+  (i, fun x -> Runcode.run (fn .< x >.))
 
 and decode_exn (Codec (dec, _)) b = dec b
 

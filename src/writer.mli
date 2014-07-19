@@ -3,7 +3,7 @@ val cs_compare : Cstruct.t -> Cstruct.t -> int
 
 type t
 
-val immediate : int -> (int -> Cstruct.t -> unit) -> t
+val immediate : int -> (int code -> Cstruct.t code -> unit code) -> t
 
 val len    : t -> int
 val empty  : t
@@ -17,5 +17,4 @@ val of_cstruct : Cstruct.t -> t
 val of_byte    : int -> t
 
 val to_cstruct : t -> Cstruct.t
-val to_writer  : t -> int * (Cstruct.t -> unit)
-
+val to_writer  : t -> int * (Cstruct.t code -> unit code)
