@@ -1,12 +1,10 @@
 # OASIS_START
-# DO NOT EDIT (digest: 02724ecae7a5b4d5f3c91d16fa9fd9b3)
+# DO NOT EDIT (digest: 4d338e327fb82ae8e52796030a672a29)
 version = "0.1.1"
 description = "Combinators for expressing ASN.1 grammars in OCaml"
 requires = "cstruct zarith"
 archive(byte) = "asn1-combinators.cma"
 archive(byte, plugin) = "asn1-combinators.cma"
-archive(native) = "asn1-combinators.cmxa"
-archive(native, plugin) = "asn1-combinators.cmxs"
 exists_if = "asn1-combinators.cma"
 # OASIS_STOP
 

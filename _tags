@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 14d20524ed79403bb2c350fe2b375d06)
+# DO NOT EDIT (digest: 9b1a6919d3d051d261399ec2caadf259)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -15,7 +15,7 @@
 "_darcs": not_hygienic
 # Library asn1-combinators
 "src/asn1-combinators.cmxs": use_asn1-combinators
-<src/asn1-combinators.{cma,cmxa}>: oasis_library_asn1_combinators_byte
+"src/asn1-combinators.cma": oasis_library_asn1_combinators_byte
 <src/*.ml{,i}>: oasis_library_asn1_combinators_byte
 <src/*.ml{,i}>: pkg_cstruct
 <src/*.ml{,i}>: pkg_zarith
