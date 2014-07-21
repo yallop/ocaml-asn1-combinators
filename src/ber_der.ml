@@ -59,7 +59,7 @@ module R = struct
 
   type header = { tag : tag ; coding : coding ; buf : Cstruct.t }
 
-  type 'a parser = header -> 'a * Cstruct.t
+  type 'a parser = header code -> ('a * Cstruct.t) code
 
   let parse_error ?header reason =
     let message = match header with
@@ -78,9 +78,9 @@ module R = struct
   let eof_error () = raise End_of_file
 
   let describe context prs header =
-    try prs header with
-    | Parse_error message ->
-        parse_error ("in " ^ context ^ ": " ^ message)
+    .< try .~(prs header) with
+       | Parse_error message ->
+           parse_error ("in " ^ context ^ ": " ^ message) >.
 
 (*
   let describe context prs header =
@@ -90,9 +90,9 @@ module R = struct
     with Parse_error message ->
       parse_error ("in " ^ context ^ ": " ^ message) *)
 
-  let (>|=) prs f header =
-    let (a, buf') = prs header in (f a, buf')
-
+  let (>|=) : 'a 'b 'c 'd. ('a -> 'b * 'c) -> ('b -> 'd) -> 'a -> 'd * 'c =
+    fun prs f header ->
+      let (a, buf') = prs header in (f a, buf')
 
   module Partial = struct
     module C = Core
@@ -153,25 +153,27 @@ module R = struct
     if n < 8 then loop 0L off else parse_error "length overflow"
 
   let p_header_unsafe buf =
-
-    let b0            = get_uint8 buf 0 in
+   (* jdy: TODO: perhaps put this function somewhere externally
+      visible and refer to it rather than inline it. *)
+   .<
+    let b0            = get_uint8 .~buf 0 in
     let t_class       = b0 land 0xc0
     and t_constructed = b0 land 0x20
     and t_tag         = b0 land 0x1f in
 
     let tagn, length_off =
       match t_tag with
-      | 0x1f -> p_big_tag buf
+      | 0x1f -> p_big_tag .~buf
       | n    -> (n, 1) in
 
-    let l0       = get_uint8 buf length_off in
+    let l0       = get_uint8 .~buf length_off in
     let t_ltype  = l0 land 0x80
     and t_length = l0 land 0x7f in
 
     let length, contents_off =
       match t_ltype with
       | 0 -> (t_length, length_off + 1)
-      | _ -> p_big_length buf (length_off + 1) t_length
+      | _ -> p_big_length .~buf (length_off + 1) t_length
     in
 
     let tag = match t_class with
@@ -186,77 +188,75 @@ module R = struct
       | (_, 0x80) -> Constructed_indefinite
       | _         -> Constructed length
 
-    and rest = shift buf contents_off in
+    and rest = shift .~buf contents_off in
 
     { tag = tag ; coding = coding ; buf = rest }
+   >.
 
-  let p_header buf =
-    try p_header_unsafe buf with
-    | Invalid_argument _ -> parse_error "malformed header"
+  let p_header buf = .<
+    try .~(p_header_unsafe .< buf >.) with
+    | Invalid_argument _ -> parse_error "malformed header" >.
 
 
-  let accepts : type a. a asn -> header -> bool = fun asn ->
+  let accepts : type a. a asn -> header code -> bool code = fun asn ->
     match tag_set asn with
-    | [t]  -> fun { tag; _ } -> tag = t
-    | tags -> fun { tag; _ } -> List.mem tag tags
+    | [t]  -> fun t' -> .< (.~t').tag = t >.
+    | tags -> fun t' -> .< List.mem (.~t').tag tags >.
 
 
-  let with_header = fun f1 f2 -> function
-
+  let with_header = fun f1 f2 h -> .< match .~h with
     | { coding = Primitive n ; buf; _ } ->
-        (f1 n buf, shift buf n)
+        (.~(f1 .< n >. .< buf >.), shift buf n)
 
     | { coding = Constructed n ; buf; _ } -> 
         let eof cs = len cs = 0 in
         let b1 = sub buf 0 n and b2 = shift buf n in
-        let (a, b1') = f2 eof b1 in
+        let (a, b1') = .~(f2 .< eof >. .< b1 >.) in
         if eof b1' then (a, b2)
         else parse_error "definite constructed: leftovers"
 
     | { coding = Constructed_indefinite ; buf; _ } ->
-        let (a, buf') = f2 is_sequence_end buf in
+        let (a, buf') = .~(f2 .< is_sequence_end >. .< buf >.) in
         if is_sequence_end buf' then
           (a, drop_sequence_end buf')
         else parse_error "indefinite constructed: leftovers"
+  >.
 
-  let constructed f =
+  let constructed f : header code -> _ code =
     with_header (fun _ _ -> parse_error "expected constructed") f
 
-  let primitive f =
+  let primitive f : header code -> _ code =
     with_header f (fun _ _ -> parse_error "expected primitive")
 
-  let primitive_n n f = primitive @@ fun n' b ->
-    if n = n' then f b
-    else parse_error "primitive: invalid length"
+  let primitive_n n (f : _ code -> _ code) : header code -> _ code = primitive @@ fun n' b ->
+    .< if n = .~n' then .~(f b)
+       else parse_error "primitive: invalid length" >.
 
-
-  let sequence_of_parser prs =
+  let sequence_of_parser prs : header code -> _ code =
     constructed @@ fun eof buf0 ->
-      let rec scan acc buf =
-        if eof buf then (List.rev acc, buf)
-        else let (a, buf') = prs (p_header buf) in scan (a :: acc) buf' in
-      scan [] buf0
+      .< let rec scan acc buf =
+          if .~eof buf then (List.rev acc, buf)
+          else let (a, buf') = .~prs (p_header buf) in scan (a :: acc) buf' in
+         scan [] .~buf0 >.
 
   let string_like (type a) impl =
     let module P = (val impl : Prim.String_primitive with type t = a) in
-
-    let rec prs = function
-      | { coding = Primitive n ; buf; _ } ->
-          (P.of_cstruct n buf, shift buf n)
-      | h -> ( sequence_of_parser prs >|= P.concat ) h in
-    prs
-
+    .< let rec prs = function
+         | { coding = Primitive n ; buf; _ } ->
+             (P.of_cstruct n buf, shift buf n)
+         | h -> 
+           let (a, buf') = .~(sequence_of_parser .< prs >. .< h >.)
+            in (P.concat a, buf')
+       in prs >.
 
   let parser_of_prim : type a. a prim -> a parser = function
-
-    | Bool       -> primitive_n 1 @@ fun buf -> get_uint8 buf 0 <> 0x00
-    | Int        -> primitive Prim.Integer.of_cstruct
-    | Bits       -> string_like (module Prim.Bits)
-    | Octets     -> string_like (module Prim.Octets)
-    | Null       -> primitive_n 0 @@ fun _ -> ()
-    | OID        -> primitive Prim.OID.of_cstruct
-    | CharString -> string_like (module Prim.Gen_string)
-
+    | Bool       -> primitive_n 1 @@ fun buf -> .< get_uint8 .~buf 0 <> 0x00 >.
+    | Int        -> primitive (fun x y -> .< Prim.Integer.of_cstruct .~x .~y >.)
+    | Bits       -> (fun x -> .< .~(string_like (module Prim.Bits)) .~x >.)
+    | Octets     -> (fun x -> .< .~(string_like (module Prim.Octets)) .~x >.)
+    | Null       -> primitive_n 0 @@ fun _ -> .< () >.
+    | OID        -> primitive (fun x y -> .< Prim.OID.of_cstruct .~x .~y >.)
+    | CharString -> (fun x -> .< .~(string_like (module Prim.Gen_string)) .~x >.)
 
   module Cache = Cache.Make ( struct
     type 'a k = 'a asn -> 'a asn
@@ -265,7 +265,8 @@ module R = struct
 
   let rec parser_of_asn : type a. a asn -> a parser = function
 
-    | Iso (f, _, _, asn) -> parser_of_asn asn >|= f
+    | Iso (f, _, _, asn) -> (* parser_of_asn asn >|= f *)
+      assert false (* jdy: TODO *)
 
     | Fix fasn as fix ->
       ( try Cache.find fasn with Not_found ->
@@ -280,39 +281,39 @@ module R = struct
         end in
         let open S in
 
-        let rec elt : type a. a element -> header -> a S.touch = function
+        let rec elt : type a. a element -> header code -> a S.touch code = function
 
           | Required (label, asn) ->
               let (prs, acpt) = (parser_of_asn asn, accepts asn) in
               describe (field label) @@ fun header ->
-                if acpt header then
-                  let (a, buf) = prs header in Hit (a, buf)
-                else parse_error ~header (i_wanted asn)
+                .<  if .~(acpt header) then
+                      let (a, buf) = .~(prs header) in Hit (a, buf)
+                    else parse_error ~header:.~(header) (i_wanted asn) >.
 
           | Optional (label, asn) ->
               let (prs, acpt) = (parser_of_asn asn, accepts asn) in
               describe (field label) @@ fun header ->
-                if acpt header then
-                  let (a, buf) = prs header in Hit (Some a, buf)
-                else Pass None
+                .< if .~(acpt header) then
+                     let (a, buf) = .~(prs header) in Hit (Some a, buf)
+                   else Pass None >.
 
-        and seq : type a. a sequence -> (Cstruct.t -> bool) -> a parser = function
-
+        and seq : type a. a sequence -> (Cstruct.t code -> bool code) -> a parser =
+         function
           | Last e ->
               let prs = elt e in fun _ header ->
-              ( match prs header with
-                | Pass _ -> parse_error ~header "not all input consumed"
-                | Hit (a, buf') -> (a, buf') )
-
+              .<
+              ( match .~(prs header) with
+                | Pass _ -> parse_error ~header:.~(header) "not all input consumed"
+                | Hit (a, buf') -> (a, buf') ) >.
           | Pair (e, tl) ->
-              let (prs1, prs2) = elt e, seq tl in fun eof header ->
-              ( match prs1 header with
-                | Hit (a, buf) when eof buf ->
+              let (prs1, prs2) = elt e, seq tl in fun eof header -> .<
+              ( match .~(prs1 header) with
+                | Hit (a, buf) when .~(eof .< buf >.) ->
                     ((a, default_or_error tl), buf)
                 | Hit (a, buf) ->
-                    let (b, buf') = prs2 eof (p_header buf) in ((a, b), buf')
+                    let (b, buf') = .~(prs2 eof (p_header .< buf>.)) in ((a, b), buf')
                 | Pass a ->
-                    let (b, buf') = prs2 eof header in ((a, b), buf') )
+                    let (b, buf') = prs2 eof header in ((a, b), buf') ) >.
 
         and default_or_error : type a. a sequence -> a = function
           | Last (Required (label, _)   ) -> missing label
